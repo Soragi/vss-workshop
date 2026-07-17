@@ -388,7 +388,7 @@ run_deploy() {
   printf '%s' "${NGC_API_KEY:-$(sed -n 's/^NGC_CLI_API_KEY=//p' "$PRIVATE_ENV_FILE")}" | docker login nvcr.io --username '$oauthtoken' --password-stdin
   compose config -q
   pull_images_to_log
-  if ! compose up -d --pull never >>"$DEPLOY_LOG" 2>&1; then
+  if ! compose up -d --pull never --remove-orphans >>"$DEPLOY_LOG" 2>&1; then
     note "Service startup failed. The last 50 deployment-log lines follow:"
     tail -n 50 "$DEPLOY_LOG" >&2 || true
     die "Unable to start the VSS Base services."
@@ -399,15 +399,15 @@ run_deploy() {
   wait_for_service nvidia-cosmos3-reasoner 1500 || die "Cosmos3 Reasoner did not become healthy. Run '$0 status' and inspect ${DEPLOY_LOG}."
   wait_for_service vss-agent 420 || die "VSS Agent did not become healthy. Run '$0 status'."
 
-  # The UI reads its NEXT_PUBLIC_* workshop settings when its container starts.
-  # Recreate only this stateless container after the agent is ready so a
-  # deployment always applies a changed workshop title or chat layout.
+  # The workshop UI is a stateless, repository-mounted Nginx container.
+  # Recreate it after the agent is ready so a deployment always applies the
+  # latest HTML, CSS, JavaScript, and workshop title.
   note "Refreshing the VSS workshop UI configuration."
   if ! compose up -d --pull never --force-recreate --no-deps vss-ui >>"$DEPLOY_LOG" 2>&1; then
     tail -n 50 "$DEPLOY_LOG" >&2 || true
     die "Unable to refresh the VSS workshop UI."
   fi
-  wait_for_service vss-agent-ui 180 || die "VSS UI did not become healthy. Run '$0 status'."
+  wait_for_service vss-workshop-ui 180 || die "VSS UI did not become healthy. Run '$0 status'."
 
   note "VSS is ready: $(brev_url)"
   note "In Brev, open or create a secure link for port 7777 only, then use that URL if it differs from the one above."

@@ -28,4 +28,12 @@ workshop/scripts/deploy_vss_base.sh stop
 
 The runtime assets needed by this workshop are under `workshop/runtime/`. They are intentionally not a general-purpose VSS deployment kit.
 
+## Updating the workshop interface
+
+The deployed **VSS AI Advisor Workshop** interface is repository-owned rather
+than a prebuilt vendor screen. Its small, editable source lives in
+`workshop/runtime/services/ui/workshop/`: change `config.js` for the title,
+`app.css` for the presentation, or `app.js` for the attendee workflow. Pull
+the update and run `deploy` again to apply it on a Brev VM.
+
 For the underlying platform documentation, see the [VSS Brev guide](https://docs.nvidia.com/vss/latest/cloud-brev.html) and [VSS prerequisites](https://docs.nvidia.com/vss/latest/prerequisites.html).
