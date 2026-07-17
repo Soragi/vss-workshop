@@ -302,6 +302,17 @@ compose() {
   docker compose --env-file "$PRIVATE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+pull_images_to_log() {
+  note "Downloading VSS container images. The detailed layer progress is recorded in ${DEPLOY_LOG}."
+  note "This can take several minutes; open a terminal and run 'tail -f ${DEPLOY_LOG}' only if you want the live pull detail."
+  if ! compose pull >>"$DEPLOY_LOG" 2>&1; then
+    note "Image download failed. The last 50 deployment-log lines follow:"
+    tail -n 50 "$DEPLOY_LOG" >&2 || true
+    die "Unable to download one or more VSS container images."
+  fi
+  note "Container images are ready. Starting Base services."
+}
+
 wait_for_service() {
   local service="$1" timeout_seconds="$2" elapsed=0 status
   while (( elapsed < timeout_seconds )); do
@@ -327,8 +338,13 @@ run_deploy() {
 
   printf '%s' "${NGC_API_KEY:-$(sed -n 's/^NGC_CLI_API_KEY=//p' "$PRIVATE_ENV_FILE")}" | docker login nvcr.io --username '$oauthtoken' --password-stdin
   compose config -q
-  note "Starting the Base services. The first model download can take 15–25 minutes. Progress is logged to ${DEPLOY_LOG}."
-  compose up -d 2>&1 | tee -a "$DEPLOY_LOG"
+  pull_images_to_log
+  if ! compose up -d --pull never >>"$DEPLOY_LOG" 2>&1; then
+    note "Service startup failed. The last 50 deployment-log lines follow:"
+    tail -n 50 "$DEPLOY_LOG" >&2 || true
+    die "Unable to start the VSS Base services."
+  fi
+  note "Base services started. The first model initialization can take 15–25 minutes."
 
   wait_for_service nvidia-nemotron-nano-9b-v2 1500 || die "Nemotron did not become healthy. Run '$0 status' and inspect ${DEPLOY_LOG}."
   wait_for_service nvidia-cosmos3-reasoner 1500 || die "Cosmos3 Reasoner did not become healthy. Run '$0 status' and inspect ${DEPLOY_LOG}."
