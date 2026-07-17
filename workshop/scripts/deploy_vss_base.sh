@@ -22,7 +22,10 @@ DEPLOY_LOG="${STATE_ROOT}/deploy.log"
 
 readonly REQUIRED_GPUS=2
 readonly MIN_GPU_MEMORY_MIB=90000
-readonly MIN_DOCKER_FREE_GIB=350
+# Docker images stay on Docker's data root; videos and VST data use the large
+# ephemeral mount. 300 GiB leaves substantial headroom for this Base stack
+# without relocating an already-working Docker installation for a 1 GiB delta.
+readonly MIN_DOCKER_FREE_GIB=300
 readonly MIN_DRIVER_VERSION=580.65.06
 readonly MIN_DOCKER_VERSION=28.3.3
 readonly MAX_DOCKER_VERSION_EXCLUSIVE=29.5.0
