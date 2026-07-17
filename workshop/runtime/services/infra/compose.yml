@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+include:
+  - path: ./haproxy/compose.yml
+
+services:
+  phoenix:
+    image: arizephoenix/phoenix:14.15.0
+    container_name: phoenix
+    profiles: ["bp_developer_base_2d"]
+    environment:
+      PHOENIX_WORKING_DIR: /.phoenix/
+      PHOENIX_HOST_ROOT_PATH: /phoenix
+    volumes:
+      - phoenix-data:/.phoenix
+    ports:
+      - "6006:6006"
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.6.2-alpine
+    container_name: redis
+    network_mode: host
+    profiles: ["bp_developer_base_2d"]
+    command: redis-server /config/redis.conf
+    volumes:
+      - ${VSS_APPS_DIR}/services/infra/redis/configs/redis.conf:/config/redis.conf:ro
+      - ${VSS_DATA_DIR}/data_log/redis/data:/data
+      - ${VSS_DATA_DIR}/data_log/redis/log:/log
+    restart: unless-stopped
+
+volumes:
+  phoenix-data:

@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  streamprocessing-ms:
+    image: ${VST_STREAM_PROCESSOR_IMAGE}
+    container_name: vss-vios-streamprocessing
+    network_mode: host
+    profiles: ["bp_developer_base_2d"]
+    user: "0:0"
+    runtime: nvidia
+    entrypoint: ["/bin/bash", "-c", "if [ \"${VST_INSTALL_ADDITIONAL_PACKAGES}\" = \"true\" ]; then /home/vst/vst_release/tools/user_additional_install.sh; fi && exec /home/vst/vst_release/launch_vst"]
+    environment:
+      VST_INSTALL_ADDITIONAL_PACKAGES: ${VST_INSTALL_ADDITIONAL_PACKAGES}
+      CONTAINER_NAME: vss-vios-streamprocessing
+      ADAPTOR: ${VST_ADAPTOR}
+      HTTP_PORT: ${STREAM_PROCESSOR_HTTP_PORT}
+      RTSP_SERVER_PORT: ${RTSP_SERVER_PORT}
+      CENTRALIZE_DB_NAME: ${CENTRALIZE_DB_NAME}
+      CENTRALIZE_DB_USERNAME: ${CENTRALIZE_DB_USERNAME}
+      SENSOR_MODULE_ENDPOINT: ${SENSOR_MODULE_ENDPOINT}
+      VST_INGRESS_ENDPOINT: ${VST_INGRESS_ENDPOINT}
+      ENABLE_AGING_POLICY: "true"
+      VST_VIDEO_STORAGE_SIZE_MB: ${VST_VIDEO_STORAGE_SIZE_MB}
+    volumes:
+      - ${VST_CONFIG_PATH}:/home/vst/vst_release/configs
+      - ${VST_DATA_PATH}:/home/vst/vst_release/vst_data
+      - ${VST_VIDEO_STORAGE_PATH}:/home/vst/vst_release/vst_video
+      - ${CLIP_STORAGE_PATH}:/home/vst/vst_release/streamer_videos
+      - ${VST_TEMP_FILES_PATH}:/home/vst/vst_release/webroot/temp_files
+      - ${VSS_APPS_DIR}/services/vios/scripts/user_additional_install.sh:/home/vst/vst_release/tools/user_additional_install.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/$${HTTP_PORT:-30001}'"]
+      interval: 20s
+      timeout: 10s
+      retries: 75
+    depends_on:
+      centralizedb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped

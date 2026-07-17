@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  vss-agent:
+    image: nvcr.io/nvidia/vss-core/vss-agent:${VSS_AGENT_VERSION}
+    container_name: vss-agent
+    network_mode: host
+    profiles: ["bp_developer_base_2d"]
+    environment:
+      LLM_MODE: ${LLM_MODE}
+      VLM_MODE: ${VLM_MODE}
+      LLM_MODEL_TYPE: ${LLM_MODEL_TYPE}
+      VLM_MODEL_TYPE: ${VLM_MODEL_TYPE}
+      HOST_IP: ${HOST_IP}
+      VSS_AGENT_VERSION: ${VSS_AGENT_VERSION}
+      VSS_AGENT_CONFIG_FILE: ${VSS_AGENT_CONFIG_FILE}
+      VSS_AGENT_HOST: ${VSS_AGENT_HOST}
+      VSS_AGENT_PORT: ${VSS_AGENT_PORT}
+      PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT}
+      VST_INTERNAL_URL: ${VST_INTERNAL_URL}
+      VST_EXTERNAL_URL: ${VST_EXTERNAL_URL}
+      LLM_NAME: ${LLM_NAME}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://${HOST_IP}:${LLM_PORT}}
+      VLM_NAME: ${VLM_NAME}
+      VLM_BASE_URL: ${VLM_BASE_URL:-http://${HOST_IP}:${VLM_PORT}}
+      ENABLE_AUDIO: ${ENABLE_AUDIO:-false}
+      INSTALL_PROPRIETARY_CODECS: ${INSTALL_PROPRIETARY_CODECS:-true}
+      VSS_AGENT_OBJECT_STORE_TYPE: ${VSS_AGENT_OBJECT_STORE_TYPE}
+      VSS_AGENT_REPORTS_BASE_URL: ${VSS_AGENT_REPORTS_BASE_URL}
+      VSS_AGENT_EXTERNAL_URL: ${VSS_AGENT_EXTERNAL_URL}
+      VSS_AGENT_TEMPLATE_PATH: ${VSS_AGENT_TEMPLATE_PATH}
+      VSS_AGENT_TEMPLATE_NAME: ${VSS_AGENT_TEMPLATE_NAME}
+    volumes:
+      - ${VSS_APPS_DIR}:/vss-agent/deploy/docker:ro
+    command: ["serve", "--config_file", "${VSS_AGENT_CONFIG_FILE}", "--host", "${VSS_AGENT_HOST}", "--port", "${VSS_AGENT_PORT}"]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://${VSS_AGENT_HOST}:${VSS_AGENT_PORT}/health',timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 240s
+    restart: unless-stopped
+    depends_on:
+      nvidia-nemotron-nano-9b-v2:
+        condition: service_healthy
+      cosmos3-reasoner:
+        condition: service_healthy

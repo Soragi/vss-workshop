@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  sensor-ms:
+    image: ${VST_SENSOR_IMAGE}
+    container_name: vss-vios-sensor
+    network_mode: host
+    profiles: ["bp_developer_base_2d"]
+    user: "0:0"
+    runtime: nvidia
+    entrypoint: ["/bin/bash", "-c", "exec /home/vst/vst_release/launch_vst"]
+    environment:
+      ADAPTOR: ${VST_ADAPTOR}
+      NEED_RECORDING: "false"
+      NEED_RTSPSERVER: "false"
+      NEED_STORAGE: "false"
+      NEED_STREAM_MONITORING: "true"
+      HTTP_PORT: ${SENSOR_HTTP_PORT}
+      CENTRALIZE_DB_NAME: ${CENTRALIZE_DB_NAME}
+      CENTRALIZE_DB_USERNAME: ${CENTRALIZE_DB_USERNAME}
+      STREAM_PROCESSOR_MODULE_ENDPOINT: ${STREAM_PROCESSOR_MODULE_ENDPOINT}
+    volumes:
+      - ${VST_CONFIG_PATH}:/home/vst/vst_release/configs
+      - ${VST_DATA_PATH}:/home/vst/vst_release/vst_data
+      - ${VST_VIDEO_STORAGE_PATH}:/home/vst/vst_release/vst_video
+    healthcheck:
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/$${HTTP_PORT:-30000}'"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      centralizedb:
+        condition: service_healthy
+    restart: on-failure

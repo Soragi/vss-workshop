@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The workshop intentionally exposes one deployment topology only: the
+# developer Base profile with dedicated GPUs for the local LLM and VLM NIMs.
+include:
+  - path: ./services/agent/compose.yml
+  - path: ./services/infra/compose.yml
+  - path: ./services/nim/compose.yml
+  - path: ./services/ui/compose.yml
+  - path: ./services/vios/compose.yml
