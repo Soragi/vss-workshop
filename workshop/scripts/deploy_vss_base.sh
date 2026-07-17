@@ -398,6 +398,15 @@ run_deploy() {
   wait_for_service nvidia-nemotron-nano-9b-v2 1500 || die "Nemotron did not become healthy. Run '$0 status' and inspect ${DEPLOY_LOG}."
   wait_for_service nvidia-cosmos3-reasoner 1500 || die "Cosmos3 Reasoner did not become healthy. Run '$0 status' and inspect ${DEPLOY_LOG}."
   wait_for_service vss-agent 420 || die "VSS Agent did not become healthy. Run '$0 status'."
+
+  # The UI reads its NEXT_PUBLIC_* workshop settings when its container starts.
+  # Recreate only this stateless container after the agent is ready so a
+  # deployment always applies a changed workshop title or chat layout.
+  note "Refreshing the VSS workshop UI configuration."
+  if ! compose up -d --pull never --force-recreate --no-deps vss-ui >>"$DEPLOY_LOG" 2>&1; then
+    tail -n 50 "$DEPLOY_LOG" >&2 || true
+    die "Unable to refresh the VSS workshop UI."
+  fi
   wait_for_service vss-agent-ui 180 || die "VSS UI did not become healthy. Run '$0 status'."
 
   note "VSS is ready: $(brev_url)"
