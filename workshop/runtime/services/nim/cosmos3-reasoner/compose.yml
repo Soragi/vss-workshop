@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  cosmos3-reasoner:
+    image: nvcr.io/nim/nvidia/cosmos3-reasoner:1.7
+    container_name: nvidia-cosmos3-reasoner
+    profiles: ["vlm_local_cosmos3-reasoner"]
+    runtime: nvidia
+    shm_size: 32gb
+    ports:
+      - "${VLM_PORT:-30082}:8000"
+    environment:
+      NGC_API_KEY: "${NGC_CLI_API_KEY}"
+      NIM_MODEL_NAME: "${VLM_NIM_MODEL_NAME:-${VLM_CUSTOM_WEIGHTS:-}}"
+      NIM_MODEL_SIZE: "${NIM_MODEL_SIZE:-nano}"
+      VLM_NIM_KVCACHE_PERCENT: "${VLM_NIM_KVCACHE_PERCENT}"
+    env_file:
+      - ${VSS_APPS_DIR}/services/nim/cosmos3-reasoner/hw-${HARDWARE_PROFILE}.env
+      - ${VLM_ENV_FILE:-${VSS_APPS_DIR}/services/nim/fallback-override.env}
+    volumes:
+      - cosmos3_reasoner_cache:/opt/nim/.cache
+    user: "${UID:-1000}:${GID:-1000}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              driver: nvidia
+              device_ids: ["${VLM_DEVICE_ID:-1}"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -f /tmp/ready_done ]; then curl --max-time 30 -f http://localhost:8000/v1/health/live; else elapsed=0; while ! curl -fs http://localhost:8000/v1/health/ready >/dev/null 2>&1; do sleep 5; elapsed=$$((elapsed + 5)); if [ $$elapsed -ge 600 ]; then exit 1; fi; done; touch /tmp/ready_done && curl --max-time 30 -f http://localhost:8000/v1/health/live; fi"]
+      interval: 60s
+      timeout: 650s
+      retries: 2
+
+volumes:
+  cosmos3_reasoner_cache:
