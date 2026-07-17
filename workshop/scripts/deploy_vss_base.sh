@@ -310,14 +310,22 @@ prepare_workshop_data() {
   # Redis and VIOS write through host bind mounts. Docker creates missing
   # mount points as root, so create them explicitly and make the workshop data
   # area writable before services start.
-  mkdir -p \
+  if ! mkdir -p \
     "${data_root}/data_log/redis/data" \
     "${data_root}/data_log/redis/log" \
     "${data_root}/data_log/vst/vst_data" \
     "${data_root}/data_log/vst/vst_video" \
     "${data_root}/data_log/vst/temp_files" \
-    "${data_root}/data_log/vst/clip_storage"
-  chmod -R 0777 "${data_root}/data_log"
+    "${data_root}/data_log/vst/clip_storage"; then
+    sudo mkdir -p \
+      "${data_root}/data_log/redis/data" \
+      "${data_root}/data_log/redis/log" \
+      "${data_root}/data_log/vst/vst_data" \
+      "${data_root}/data_log/vst/vst_video" \
+      "${data_root}/data_log/vst/temp_files" \
+      "${data_root}/data_log/vst/clip_storage"
+  fi
+  chmod -R 0777 "${data_root}/data_log" 2>/dev/null || sudo chmod -R 0777 "${data_root}/data_log"
 }
 
 pull_images_to_log() {
