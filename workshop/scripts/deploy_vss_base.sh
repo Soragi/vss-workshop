@@ -302,6 +302,24 @@ compose() {
   docker compose --env-file "$PRIVATE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+prepare_workshop_data() {
+  local data_root
+  data_root="$(sed -n 's/^VSS_DATA_DIR=//p' "$PRIVATE_ENV_FILE" | tail -n1)"
+  [[ -n "$data_root" ]] || die "The private VSS environment does not define VSS_DATA_DIR."
+
+  # Redis and VIOS write through host bind mounts. Docker creates missing
+  # mount points as root, so create them explicitly and make the workshop data
+  # area writable before services start.
+  mkdir -p \
+    "${data_root}/data_log/redis/data" \
+    "${data_root}/data_log/redis/log" \
+    "${data_root}/data_log/vst/vst_data" \
+    "${data_root}/data_log/vst/vst_video" \
+    "${data_root}/data_log/vst/temp_files" \
+    "${data_root}/data_log/vst/clip_storage"
+  chmod -R 0777 "${data_root}/data_log"
+}
+
 pull_images_to_log() {
   note "Downloading VSS container images. The detailed layer progress is recorded in ${DEPLOY_LOG}."
   note "This can take several minutes; open a terminal and run 'tail -f ${DEPLOY_LOG}' only if you want the live pull detail."
@@ -335,6 +353,7 @@ run_deploy() {
   pin_docker_to_supported_version
   configure_docker_storage_if_needed
   make_private_environment
+  prepare_workshop_data
 
   printf '%s' "${NGC_API_KEY:-$(sed -n 's/^NGC_CLI_API_KEY=//p' "$PRIVATE_ENV_FILE")}" | docker login nvcr.io --username '$oauthtoken' --password-stdin
   compose config -q
