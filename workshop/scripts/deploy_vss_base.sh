@@ -67,11 +67,30 @@ host_ip() {
   hostname -I 2>/dev/null | awk '{print $1}' || true
 }
 
+brev_instance_id() {
+  local instance_id hostname
+  instance_id="${BREV_ENV_ID:-${BREV_INSTANCE_ID:-}}"
+  if [[ -n "$instance_id" ]]; then
+    printf '%s' "$instance_id"
+    return 0
+  fi
+
+  # Brev VMs are named brev-<instance-id>. The VM does not always receive a
+  # BREV_ENV_ID environment variable, so use that stable hostname as the
+  # fallback when deriving its secure-link address.
+  hostname="$(hostname -s 2>/dev/null || true)"
+  if [[ "$hostname" == brev-* && "${hostname#brev-}" != "$hostname" ]]; then
+    printf '%s' "${hostname#brev-}"
+  fi
+}
+
 brev_url() {
-  local env_id="${BREV_ENV_ID:-${BREV_INSTANCE_ID:-}}"
-  local domain="${BREV_LINK_DOMAIN:-apps.run.brev.nvidia.com}"
+  local env_id domain service_name
+  env_id="$(brev_instance_id)"
+  domain="${BREV_LINK_DOMAIN:-brevlab.com}"
+  service_name="${BREV_UI_SERVICE_NAME:-ui}"
   if [[ -n "$env_id" ]]; then
-    printf 'https://7777-%s.%s' "$env_id" "$domain"
+    printf 'https://%s-%s.%s' "$service_name" "$env_id" "$domain"
   else
     printf 'http://%s:7777' "$(host_ip)"
   fi
