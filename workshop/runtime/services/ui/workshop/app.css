@@ -65,10 +65,17 @@ h2 { margin-bottom: 8px; font-size: clamp(28px, 2.6vw, 40px); letter-spacing: -0
 .selected-video { margin-top: 28px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: rgb(255 255 255 / 0.025); }
 .selected-video-empty { display: grid; gap: 5px; color: var(--muted); font-size: 14px; line-height: 1.4; }
 .selected-video-empty strong { color: var(--text); font-size: 15px; }
-.selected-video-active { display: flex; align-items: center; gap: 12px; }
+.selected-video-active { display: grid; gap: 13px; }
+.selected-video-summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .selected-video-badge { flex: 0 0 auto; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; color: #080a09; background: var(--green-bright); font-size: 11px; font-weight: 800; }
-.selected-video-active strong, .selected-video-active span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.selected-video-active span { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.selected-video-summary div { min-width: 0; }
+.selected-video-summary strong, .selected-video-summary span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selected-video-summary span { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.selected-video-preview { position: relative; overflow: hidden; min-height: 150px; border: 1px solid #303a34; border-radius: 10px; background: #050706; }
+.selected-video-preview video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #050706; object-fit: contain; }
+.preview-status { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; color: var(--muted); text-align: center; background: linear-gradient(145deg, rgb(16 24 18 / 0.96), rgb(4 7 5 / 0.96)); font-size: 12px; line-height: 1.5; }
+.preview-status[hidden] { display: none; }
+.preview-meta { display: block; min-height: 26px; padding: 6px 10px; color: var(--muted); text-align: right; background: #0b0f0c; font-size: 11px; }
 
 .prompt-starters { margin-top: 24px; }
 .prompt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

@@ -54,8 +54,11 @@ functions:
     vlm_name: ${VLM_MODEL_TYPE:-nim}_vlm # e.g. nim_vlm, openai_vlm
     max_frames: 30
     max_fps: 2  # for CR1, max fps is 2
-    min_pixels: 3136
-    max_pixels: 8388608
+    # Keep the original video for playback, but resize frames sent to Cosmos.
+    # The NIM rejects either dimension above 2048; the VSS tool's supported
+    # defaults safely handle 4K landscape and portrait workshop uploads.
+    min_pixels: 1568
+    max_pixels: 345600
     reasoning: false
     video_url_tool: vst_video_clip
     time_format: offset
@@ -275,6 +278,8 @@ workflow:
     - ALWAYS include ALL required parameters when calling tools
     - If a tool call fails with a validation error, RETRY IMMEDIATELY: Fix the error and call the tool again with correct parameters.
     - Error Handling: if a tool fails more than 3 times, just return a summarized error message. Do not endlessly try again.
+    - video_understanding automatically resizes sampled frames for the VLM. There is no video_downsampling tool: never call or claim to have called one.
+    - If video_understanding returns the same error twice, stop retrying and give the user one concise, actionable error message.
     - Video urls could contain suffix like _20250101_*, you should remove the suffix before matching to the video/sensor name.
     - Use video/sensor names instead of the url to call other tools.
 

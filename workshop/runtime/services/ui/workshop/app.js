@@ -6,6 +6,8 @@ const state = {
   videos: [],
   selectedVideo: null,
   sending: false,
+  previewUrls: new Map(),
+  previewRequestId: 0,
 };
 
 const elements = {
@@ -64,6 +66,53 @@ function refreshControls() {
   });
 }
 
+function formatDuration(totalSeconds) {
+  if (!Number.isFinite(totalSeconds)) return '';
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.round(totalSeconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${seconds}`;
+}
+
+async function getPreviewUrl(video) {
+  const cachedUrl = state.previewUrls.get(video.sensorId);
+  if (cachedUrl) return cachedUrl;
+
+  const sensorId = encodeURIComponent(video.sensorId);
+  const timelines = await fetchJson(`/vst/api/v1/sensor/${sensorId}/timelines`);
+  if (!Array.isArray(timelines) || timelines.length === 0) {
+    throw new Error('The video timeline is not ready yet.');
+  }
+
+  const startTime = timelines
+    .map((timeline) => timeline.startTime)
+    .filter(Boolean)
+    .sort()[0];
+  const endTime = timelines
+    .map((timeline) => timeline.endTime)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  if (!startTime || !endTime) {
+    throw new Error('The video timeline is incomplete.');
+  }
+
+  const parameters = new URLSearchParams({
+    startTime,
+    endTime,
+    blocking: 'true',
+    disableAudio: 'false',
+  });
+  const clip = await fetchJson(`/vst/api/v1/storage/file/${sensorId}/url?${parameters}`);
+  if (!clip.videoUrl) throw new Error('VST did not return a preview URL.');
+
+  // VST returns its internal host address. Keep only the path so the browser
+  // uses the attendee's authenticated Brev secure-link origin.
+  const internalUrl = new URL(clip.videoUrl, window.location.origin);
+  const previewUrl = `${internalUrl.pathname}${internalUrl.search}`;
+  state.previewUrls.set(video.sensorId, previewUrl);
+  return previewUrl;
+}
+
 function renderSelectedVideo() {
   const target = elements.selectedVideo;
   target.replaceChildren();
@@ -80,6 +129,8 @@ function renderSelectedVideo() {
   }
 
   target.className = 'selected-video-active';
+  const summary = document.createElement('div');
+  summary.className = 'selected-video-summary';
   const badge = document.createElement('span');
   badge.className = 'selected-video-badge';
   badge.textContent = 'MP4';
@@ -89,7 +140,46 @@ function renderSelectedVideo() {
   const copy = document.createElement('span');
   copy.textContent = 'Attached to this conversation';
   details.append(title, copy);
-  target.append(badge, details);
+  summary.append(badge, details);
+
+  const previewShell = document.createElement('div');
+  previewShell.className = 'selected-video-preview';
+  const preview = document.createElement('video');
+  preview.controls = true;
+  preview.playsInline = true;
+  preview.preload = 'metadata';
+  preview.setAttribute('aria-label', `Preview ${state.selectedVideo.name}`);
+  const previewStatus = document.createElement('span');
+  previewStatus.className = 'preview-status';
+  previewStatus.textContent = 'Preparing preview…';
+  const previewMeta = document.createElement('span');
+  previewMeta.className = 'preview-meta';
+  previewShell.append(preview, previewStatus, previewMeta);
+  target.append(summary, previewShell);
+
+  const selectedSensorId = state.selectedVideo.sensorId;
+  const requestId = ++state.previewRequestId;
+  preview.addEventListener('loadedmetadata', () => {
+    previewStatus.hidden = true;
+    const duration = formatDuration(preview.duration);
+    previewMeta.textContent = [
+      duration,
+      preview.videoWidth && preview.videoHeight ? `${preview.videoWidth} × ${preview.videoHeight}` : '',
+    ].filter(Boolean).join(' · ');
+  });
+  preview.addEventListener('error', () => {
+    previewStatus.hidden = false;
+    previewStatus.textContent = 'Preview could not be loaded. The video remains available to the advisor.';
+  });
+  getPreviewUrl(state.selectedVideo)
+    .then((previewUrl) => {
+      if (requestId !== state.previewRequestId || state.selectedVideo?.sensorId !== selectedSensorId) return;
+      preview.src = previewUrl;
+    })
+    .catch((error) => {
+      if (requestId !== state.previewRequestId || state.selectedVideo?.sensorId !== selectedSensorId) return;
+      previewStatus.textContent = error.message;
+    });
   refreshControls();
 }
 
@@ -180,6 +270,12 @@ function buildAdvisorRequest(question) {
   ].join('\n\n');
 }
 
+function cleanAdvisorResponse(value) {
+  const response = String(value || '');
+  const withoutThinking = response.replace(/<agent-think>[\s\S]*?<\/agent-think>/gi, '').trim();
+  return withoutThinking || 'The advisor returned an empty response.';
+}
+
 async function askAdvisor(question) {
   const trimmedQuestion = question.trim();
   if (!state.selectedVideo || !trimmedQuestion || state.sending) return;
@@ -196,7 +292,7 @@ async function askAdvisor(question) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input_message: buildAdvisorRequest(trimmedQuestion) }),
     });
-    appendMessage('advisor', response.value || 'The advisor returned an empty response.');
+    appendMessage('advisor', cleanAdvisorResponse(response.value));
     setAdvisorStatus('Ready for another question.');
   } catch (error) {
     appendMessage('advisor', `I could not complete that request: ${error.message}`);
