@@ -18,6 +18,8 @@ services:
     volumes:
       - ${VSS_APPS_DIR}/services/agent/video_analysis_proxy.py:/opt/vss-workshop/video_analysis_proxy.py:ro
       - ${VSS_DATA_DIR}/data_log/vst/temp_files:/input:ro
+      # VST exposes full-file clips as absolute symlinks into streamer_videos.
+      - ${VSS_DATA_DIR}/data_log/vst/clip_storage:/home/vst/vst_release/streamer_videos:ro
       - ${VSS_DATA_DIR}/data_log/analysis-cache:/output
     entrypoint: ["/usr/bin/python3", "/opt/vss-workshop/video_analysis_proxy.py"]
     healthcheck:
