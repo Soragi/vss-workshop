@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0d0b" />
+    <title>VSS AI Advisor Workshop</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand" aria-label="NVIDIA VSS AI Advisor Workshop">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-nvidia">NVIDIA</span>
+        <span class="brand-divider" aria-hidden="true"></span>
+        <span id="appTitle" class="brand-title">VSS AI Advisor Workshop</span>
+      </div>
+      <div class="system-state"><span class="status-dot" aria-hidden="true"></span>VSS connected</div>
+    </header>
+
+    <main class="workspace">
+      <aside class="advisor" aria-label="AI Video Advisor">
+        <div class="advisor-heading">
+          <div>
+            <p class="eyebrow">AI VIDEO ADVISOR</p>
+            <h1>Ask about your video</h1>
+          </div>
+          <span class="advisor-ready">Ready</span>
+        </div>
+
+        <section class="selected-video" aria-live="polite">
+          <p class="section-label">CURRENT VIDEO</p>
+          <div id="selectedVideo" class="selected-video-empty">
+            <strong>Select a video</strong>
+            <span>Choose a card on the right to give the advisor context.</span>
+          </div>
+        </section>
+
+        <section class="prompt-starters" aria-label="Suggested prompts">
+          <p class="section-label">START WITH A PROMPT</p>
+          <div class="prompt-grid">
+            <button class="prompt-chip" type="button" data-prompt="Give me a concise timeline of what happens in this video.">Create timeline</button>
+            <button class="prompt-chip" type="button" data-prompt="Summarize the most important events in this video.">Summarize video</button>
+            <button class="prompt-chip" type="button" data-prompt="What are the key people, objects, and actions in this video?">Identify key details</button>
+            <button class="prompt-chip" type="button" data-prompt="Generate a concise report with timestamps for this video.">Generate report</button>
+          </div>
+        </section>
+
+        <section id="conversation" class="conversation" aria-live="polite" aria-label="Advisor conversation">
+          <div class="empty-conversation">
+            <div class="empty-orb" aria-hidden="true"></div>
+            <h2>Your advisor is ready</h2>
+            <p>Select a video, then ask a question or choose a prompt above.</p>
+          </div>
+        </section>
+
+        <form id="chatForm" class="composer">
+          <label class="sr-only" for="chatInput">Ask about the selected video</label>
+          <textarea id="chatInput" rows="2" placeholder="Ask about the selected video…" disabled></textarea>
+          <button id="sendButton" class="send-button" type="submit" disabled>Ask AI</button>
+        </form>
+        <p id="advisorStatus" class="advisor-status" role="status"></p>
+      </aside>
+
+      <section class="library" aria-label="Video workspace">
+        <div class="library-heading">
+          <div>
+            <p class="eyebrow">WORKSHOP WORKSPACE</p>
+            <h2>Your videos</h2>
+            <p class="library-description">Upload a short MP4, select it, then start a visual Q&amp;A conversation.</p>
+          </div>
+          <label class="upload-button" for="videoUpload">
+            <span aria-hidden="true">+</span> Upload video
+          </label>
+          <input id="videoUpload" type="file" accept="video/mp4" hidden />
+        </div>
+
+        <div id="uploadStatus" class="upload-status" role="status" hidden></div>
+        <div id="videoGrid" class="video-grid" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <template id="videoCardTemplate">
+      <button class="video-card" type="button">
+        <span class="video-art" aria-hidden="true"><span class="play-symbol">Play</span></span>
+        <span class="video-card-body">
+          <span class="video-card-topline"><span class="video-format">MP4</span><span class="video-ready">Ready</span></span>
+          <strong class="video-name"></strong>
+          <span class="video-card-note">Select to ask the advisor</span>
+        </span>
+      </button>
+    </template>
+
+    <script src="/config.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

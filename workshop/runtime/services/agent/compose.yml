@@ -31,6 +31,15 @@ services:
       VSS_AGENT_EXTERNAL_URL: ${VSS_AGENT_EXTERNAL_URL}
       VSS_AGENT_TEMPLATE_PATH: ${VSS_AGENT_TEMPLATE_PATH}
       VSS_AGENT_TEMPLATE_NAME: ${VSS_AGENT_TEMPLATE_NAME}
+      # The Base config retains an unused evaluation schema; these values keep
+      # its optional evaluator definitions valid without shipping eval assets.
+      EVAL_LLM_JUDGE_NAME: ${EVAL_LLM_JUDGE_NAME}
+      EVAL_LLM_JUDGE_BASE_URL: ${EVAL_LLM_JUDGE_BASE_URL}
+      EVAL_DIR: ${EVAL_DIR}
+      DATASET_DIR: ${DATASET_DIR}
+      DATASET_FILE_NAME: ${DATASET_FILE_NAME}
+      EVAL_OUTPUT_DIR: ${EVAL_OUTPUT_DIR}
+      REPORT_REFERENCE_BASE_DIR: ${REPORT_REFERENCE_BASE_DIR}
     volumes:
       - ${VSS_APPS_DIR}:/vss-agent/deploy/docker:ro
     command: ["serve", "--config_file", "${VSS_AGENT_CONFIG_FILE}", "--host", "${VSS_AGENT_HOST}", "--port", "${VSS_AGENT_PORT}"]

@@ -22,10 +22,19 @@ DEPLOY_LOG="${STATE_ROOT}/deploy.log"
 
 readonly REQUIRED_GPUS=2
 readonly MIN_GPU_MEMORY_MIB=90000
-readonly MIN_DOCKER_FREE_GIB=350
+# Docker images stay on Docker's data root; videos and VST data use the large
+# ephemeral mount. 300 GiB leaves substantial headroom for this Base stack
+# without relocating an already-working Docker installation for a 1 GiB delta.
+readonly MIN_DOCKER_FREE_GIB=300
 readonly MIN_DRIVER_VERSION=580.65.06
 readonly MIN_DOCKER_VERSION=28.3.3
 readonly MAX_DOCKER_VERSION_EXCLUSIVE=29.5.0
+readonly MIN_COMPOSE_VERSION=2.39.1
+
+# `check` reports an incompatible Docker engine but does not prevent attendees
+# from reaching the deployment step. On a clean Brev VM, `deploy` safely pins
+# Docker CE to the newest supported 28.x package before starting VSS.
+DOCKER_REQUIRES_PIN=0
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -58,11 +67,30 @@ host_ip() {
   hostname -I 2>/dev/null | awk '{print $1}' || true
 }
 
+brev_instance_id() {
+  local instance_id hostname
+  instance_id="${BREV_ENV_ID:-${BREV_INSTANCE_ID:-}}"
+  if [[ -n "$instance_id" ]]; then
+    printf '%s' "$instance_id"
+    return 0
+  fi
+
+  # Brev VMs are named brev-<instance-id>. The VM does not always receive a
+  # BREV_ENV_ID environment variable, so use that stable hostname as the
+  # fallback when deriving its secure-link address.
+  hostname="$(hostname -s 2>/dev/null || true)"
+  if [[ "$hostname" == brev-* && "${hostname#brev-}" != "$hostname" ]]; then
+    printf '%s' "${hostname#brev-}"
+  fi
+}
+
 brev_url() {
-  local env_id="${BREV_ENV_ID:-${BREV_INSTANCE_ID:-}}"
-  local domain="${BREV_LINK_DOMAIN:-apps.run.brev.nvidia.com}"
+  local env_id domain service_name
+  env_id="$(brev_instance_id)"
+  domain="${BREV_LINK_DOMAIN:-brevlab.com}"
+  service_name="${BREV_UI_SERVICE_NAME:-ui}"
   if [[ -n "$env_id" ]]; then
-    printf 'https://7777-%s.%s' "$env_id" "$domain"
+    printf 'https://%s-%s.%s' "$service_name" "$env_id" "$domain"
   else
     printf 'http://%s:7777' "$(host_ip)"
   fi
@@ -105,11 +133,61 @@ check_docker() {
   docker info >/dev/null 2>&1 || die "Docker is not running or your user cannot access it."
   docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required."
 
-  local docker_version
+  local docker_version compose_version
   docker_version="$(docker version --format '{{.Server.Version}}' | sed 's/[^0-9.].*$//')"
-  version_at_least "$docker_version" "$MIN_DOCKER_VERSION" || die "Docker ${docker_version} is older than the supported minimum ${MIN_DOCKER_VERSION}."
-  version_before "$docker_version" "$MAX_DOCKER_VERSION_EXCLUSIVE" || die "Docker ${docker_version} is outside the validated range (< ${MAX_DOCKER_VERSION_EXCLUSIVE})."
+  compose_version="$(docker compose version --short | sed 's/[^0-9.].*$//')"
+  version_at_least "$compose_version" "$MIN_COMPOSE_VERSION" || die "Docker Compose ${compose_version} is older than the required minimum ${MIN_COMPOSE_VERSION}."
+
+  if ! version_at_least "$docker_version" "$MIN_DOCKER_VERSION" || ! version_before "$docker_version" "$MAX_DOCKER_VERSION_EXCLUSIVE"; then
+    DOCKER_REQUIRES_PIN=1
+    note "WARNING: Docker ${docker_version} is outside VSS's supported range (${MIN_DOCKER_VERSION} <= version < ${MAX_DOCKER_VERSION_EXCLUSIVE})."
+    note "On this clean Brev VM, the deploy step will pin Docker CE to the newest compatible 28.x release and restart Docker."
+    return 0
+  fi
+
+  DOCKER_REQUIRES_PIN=0
   note "Docker check passed: Docker ${docker_version} with Compose v2."
+}
+
+latest_supported_docker_ce_package() {
+  local package_version engine_version
+  apt-cache madison docker-ce | awk '{print $3}' | while IFS= read -r package_version; do
+    engine_version="${package_version#*:}"
+    engine_version="${engine_version%%-*}"
+    if version_at_least "$engine_version" "$MIN_DOCKER_VERSION" && version_before "$engine_version" "$MAX_DOCKER_VERSION_EXCLUSIVE"; then
+      printf '%s\n' "$package_version"
+    fi
+  done | sort -V | tail -n1
+}
+
+pin_docker_to_supported_version() {
+  local package_version
+  (( DOCKER_REQUIRES_PIN == 1 )) || return 0
+
+  [[ "$(uname -s)" == Linux ]] || die "Docker ${MAX_DOCKER_VERSION_EXCLUSIVE}+ must be replaced with a supported version on Linux. Use the target Brev Ubuntu VM."
+  require_command apt-cache
+  require_command apt-get
+  require_command dpkg-query
+  [[ -z "$(docker ps -q)" ]] || die "Docker needs to be pinned, but containers are already running. Use a clean workshop VM before deploying."
+
+  note "Refreshing Docker CE package metadata to select a VSS-supported engine."
+  sudo apt-get update
+  package_version="$(latest_supported_docker_ce_package)"
+  [[ -n "$package_version" ]] || die "No compatible Docker CE package was found. Recreate the Brev VM with a VSS-compatible image or install Docker CE ${MIN_DOCKER_VERSION} through 28.x from Docker's apt repository."
+
+  note "Installing Docker CE ${package_version}; Docker will restart."
+  sudo apt-get install -y --allow-downgrades "docker-ce=${package_version}" "docker-ce-cli=${package_version}"
+  sudo apt-mark hold docker-ce docker-ce-cli
+  if command -v systemctl >/dev/null 2>&1; then
+    sudo systemctl restart docker
+  else
+    sudo service docker restart
+  fi
+
+  DOCKER_REQUIRES_PIN=0
+  check_docker
+  (( DOCKER_REQUIRES_PIN == 0 )) || die "Docker is still outside VSS's supported range after pinning."
+  note "Docker has been pinned for this workshop. Run 'sudo apt-mark unhold docker-ce docker-ce-cli' after the event if this VM will be reused."
 }
 
 check_storage() {
@@ -142,7 +220,11 @@ run_check() {
   check_docker
   check_storage
   check_compose_graph
-  note "Preflight complete. GPU 0 is reserved for Nemotron Nano 9B v2; GPU 1 is reserved for Cosmos3 Nano Reasoner."
+  if (( DOCKER_REQUIRES_PIN == 1 )); then
+    note "Preflight complete with a managed Docker repair pending. GPU 0 is reserved for Nemotron Nano 9B v2; GPU 1 is reserved for Cosmos3 Nano Reasoner."
+  else
+    note "Preflight complete. GPU 0 is reserved for Nemotron Nano 9B v2; GPU 1 is reserved for Cosmos3 Nano Reasoner."
+  fi
 }
 
 configure_docker_storage_if_needed() {
@@ -242,6 +324,43 @@ compose() {
   docker compose --env-file "$PRIVATE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+prepare_workshop_data() {
+  local data_root
+  data_root="$(sed -n 's/^VSS_DATA_DIR=//p' "$PRIVATE_ENV_FILE" | tail -n1)"
+  [[ -n "$data_root" ]] || die "The private VSS environment does not define VSS_DATA_DIR."
+
+  # Redis and VIOS write through host bind mounts. Docker creates missing
+  # mount points as root, so create them explicitly and make the workshop data
+  # area writable before services start.
+  if ! mkdir -p \
+    "${data_root}/data_log/redis/data" \
+    "${data_root}/data_log/redis/log" \
+    "${data_root}/data_log/vst/vst_data" \
+    "${data_root}/data_log/vst/vst_video" \
+    "${data_root}/data_log/vst/temp_files" \
+    "${data_root}/data_log/vst/clip_storage"; then
+    sudo mkdir -p \
+      "${data_root}/data_log/redis/data" \
+      "${data_root}/data_log/redis/log" \
+      "${data_root}/data_log/vst/vst_data" \
+      "${data_root}/data_log/vst/vst_video" \
+      "${data_root}/data_log/vst/temp_files" \
+      "${data_root}/data_log/vst/clip_storage"
+  fi
+  chmod -R 0777 "${data_root}/data_log" 2>/dev/null || sudo chmod -R 0777 "${data_root}/data_log"
+}
+
+pull_images_to_log() {
+  note "Downloading VSS container images. The detailed layer progress is recorded in ${DEPLOY_LOG}."
+  note "This can take several minutes; open a terminal and run 'tail -f ${DEPLOY_LOG}' only if you want the live pull detail."
+  if ! compose pull >>"$DEPLOY_LOG" 2>&1; then
+    note "Image download failed. The last 50 deployment-log lines follow:"
+    tail -n 50 "$DEPLOY_LOG" >&2 || true
+    die "Unable to download one or more VSS container images."
+  fi
+  note "Container images are ready. Starting Base services."
+}
+
 wait_for_service() {
   local service="$1" timeout_seconds="$2" elapsed=0 status
   while (( elapsed < timeout_seconds )); do
@@ -261,18 +380,34 @@ wait_for_service() {
 
 run_deploy() {
   run_check
+  pin_docker_to_supported_version
   configure_docker_storage_if_needed
   make_private_environment
+  prepare_workshop_data
 
   printf '%s' "${NGC_API_KEY:-$(sed -n 's/^NGC_CLI_API_KEY=//p' "$PRIVATE_ENV_FILE")}" | docker login nvcr.io --username '$oauthtoken' --password-stdin
   compose config -q
-  note "Starting the Base services. The first model download can take 15–25 minutes. Progress is logged to ${DEPLOY_LOG}."
-  compose up -d 2>&1 | tee -a "$DEPLOY_LOG"
+  pull_images_to_log
+  if ! compose up -d --pull never --remove-orphans >>"$DEPLOY_LOG" 2>&1; then
+    note "Service startup failed. The last 50 deployment-log lines follow:"
+    tail -n 50 "$DEPLOY_LOG" >&2 || true
+    die "Unable to start the VSS Base services."
+  fi
+  note "Base services started. The first model initialization can take 15–25 minutes."
 
   wait_for_service nvidia-nemotron-nano-9b-v2 1500 || die "Nemotron did not become healthy. Run '$0 status' and inspect ${DEPLOY_LOG}."
   wait_for_service nvidia-cosmos3-reasoner 1500 || die "Cosmos3 Reasoner did not become healthy. Run '$0 status' and inspect ${DEPLOY_LOG}."
   wait_for_service vss-agent 420 || die "VSS Agent did not become healthy. Run '$0 status'."
-  wait_for_service vss-agent-ui 180 || die "VSS UI did not become healthy. Run '$0 status'."
+
+  # The workshop UI is a stateless, repository-mounted Nginx container.
+  # Recreate it after the agent is ready so a deployment always applies the
+  # latest HTML, CSS, JavaScript, and workshop title.
+  note "Refreshing the VSS workshop UI configuration."
+  if ! compose up -d --pull never --force-recreate --no-deps vss-ui >>"$DEPLOY_LOG" 2>&1; then
+    tail -n 50 "$DEPLOY_LOG" >&2 || true
+    die "Unable to refresh the VSS workshop UI."
+  fi
+  wait_for_service vss-workshop-ui 180 || die "VSS UI did not become healthy. Run '$0 status'."
 
   note "VSS is ready: $(brev_url)"
   note "In Brev, open or create a secure link for port 7777 only, then use that URL if it differs from the one above."
