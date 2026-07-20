@@ -8,13 +8,15 @@ VSS Agent 3.2.1 recognizes Cosmos 3, but sends its pixel budget using the
 legacy ``videos_kwargs`` schema. Cosmos 3 Reasoner expects ``size`` with
 ``shortest_edge`` and ``longest_edge`` instead. Keep this compatibility shim
 small, exact, and fail-closed so a future image change cannot be patched
-silently.
+silently. Run the NAT console script in this interpreter because the stock
+entrypoint uses ``execv``, which would discard the in-memory import hook.
 """
 
 from __future__ import annotations
 
 import importlib.abc
 import importlib.util
+import os
 from pathlib import Path
 import runpy
 import sys
@@ -44,6 +46,8 @@ PATCHED_VIDEO_URL = """            analysis_base_url = config.vst_internal_url
 
 
 TARGET_MODULE = "vss_agents.tools.video_understanding"
+NAT_BIN = "/vss-agent/.venv/bin/nat"
+_TRUTHY = {"1", "true", "yes", "on"}
 
 
 class PatchedModuleLoader(importlib.abc.Loader):
@@ -113,10 +117,26 @@ def replace_exactly_once(source: str, original: str, replacement: str, label: st
     return source.replace(original, replacement, 1)
 
 
+def install_proprietary_codecs_if_requested() -> None:
+    value = os.environ.get("INSTALL_PROPRIETARY_CODECS", "")
+    if value.strip().lower() not in _TRUTHY:
+        return
+
+    sys.path.insert(0, "/vss-agent")
+    import install_proprietary_codecs  # noqa: PLC0415
+
+    target = install_proprietary_codecs.install()
+    if target:
+        sys.path.insert(0, target)
+        existing = os.environ.get("PYTHONPATH", "")
+        os.environ["PYTHONPATH"] = target + (os.pathsep + existing if existing else "")
+
+
 def main() -> None:
+    install_proprietary_codecs_if_requested()
     install_cosmos3_request_shape_fix()
-    sys.argv = ["/vss-agent/entrypoint.py", *sys.argv[1:]]
-    runpy.run_path("/vss-agent/entrypoint.py", run_name="__main__")
+    sys.argv = [NAT_BIN, *sys.argv[1:]]
+    runpy.run_path(NAT_BIN, run_name="__main__")
 
 
 if __name__ == "__main__":
