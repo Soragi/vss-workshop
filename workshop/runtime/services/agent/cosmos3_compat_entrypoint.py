@@ -37,7 +37,7 @@ ORIGINAL_VIDEO_URL = """            video_url = rewrite_to_internal_vst_url(vide
 """
 
 PATCHED_VIDEO_URL = """            analysis_base_url = (
-                "http://127.0.0.1:30900" if is_cosmos_model else config.vst_internal_url
+                "http://127.0.0.1:30900"
             )
             video_url = rewrite_to_internal_vst_url(video_url, analysis_base_url)
 """
