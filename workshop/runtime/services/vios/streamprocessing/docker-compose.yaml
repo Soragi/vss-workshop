@@ -9,7 +9,15 @@ services:
     profiles: ["bp_developer_base_2d"]
     user: "0:0"
     runtime: nvidia
-    entrypoint: ["/bin/bash", "-c", "if [ \"${VST_INSTALL_ADDITIONAL_PACKAGES}\" = \"true\" ]; then /home/vst/vst_release/tools/user_additional_install.sh; fi && exec /home/vst/vst_release/launch_vst"]
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        if [ "${VST_INSTALL_ADDITIONAL_PACKAGES}" = "true" ]; then
+          /home/vst/vst_release/tools/user_additional_install.sh
+        fi
+        /usr/bin/python3 /home/vst/vst_release/tools/video_analysis_proxy.py &
+        exec /home/vst/vst_release/launch_vst
     environment:
       VST_INSTALL_ADDITIONAL_PACKAGES: ${VST_INSTALL_ADDITIONAL_PACKAGES}
       CONTAINER_NAME: vss-vios-streamprocessing
@@ -22,6 +30,10 @@ services:
       VST_INGRESS_ENDPOINT: ${VST_INGRESS_ENDPOINT}
       ENABLE_AGING_POLICY: "true"
       VST_VIDEO_STORAGE_SIZE_MB: ${VST_VIDEO_STORAGE_SIZE_MB}
+      ANALYSIS_PROXY_BIND: 127.0.0.1
+      ANALYSIS_PROXY_PORT: 30900
+      ANALYSIS_INPUT_DIR: /home/vst/vst_release/webroot/temp_files
+      ANALYSIS_CACHE_DIR: /home/vst/vst_release/webroot/temp_files/.analysis_cache
     volumes:
       - ${VST_CONFIG_PATH}:/home/vst/vst_release/configs
       - ${VST_DATA_PATH}:/home/vst/vst_release/vst_data
@@ -29,8 +41,9 @@ services:
       - ${CLIP_STORAGE_PATH}:/home/vst/vst_release/streamer_videos
       - ${VST_TEMP_FILES_PATH}:/home/vst/vst_release/webroot/temp_files
       - ${VSS_APPS_DIR}/services/vios/scripts/user_additional_install.sh:/home/vst/vst_release/tools/user_additional_install.sh:ro
+      - ${VSS_APPS_DIR}/services/agent/video_analysis_proxy.py:/home/vst/vst_release/tools/video_analysis_proxy.py:ro
     healthcheck:
-      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/$${HTTP_PORT:-30001}'"]
+      test: ["CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/$${HTTP_PORT:-30001}; exec 4<>/dev/tcp/127.0.0.1/$${ANALYSIS_PROXY_PORT:-30900}'"]
       interval: 20s
       timeout: 10s
       retries: 75

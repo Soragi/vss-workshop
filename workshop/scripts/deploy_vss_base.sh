@@ -335,7 +335,6 @@ prepare_workshop_data() {
   if ! mkdir -p \
     "${data_root}/data_log/redis/data" \
     "${data_root}/data_log/redis/log" \
-    "${data_root}/data_log/analysis-cache" \
     "${data_root}/data_log/vst/vst_data" \
     "${data_root}/data_log/vst/vst_video" \
     "${data_root}/data_log/vst/temp_files" \
@@ -343,7 +342,6 @@ prepare_workshop_data() {
     sudo mkdir -p \
       "${data_root}/data_log/redis/data" \
       "${data_root}/data_log/redis/log" \
-      "${data_root}/data_log/analysis-cache" \
       "${data_root}/data_log/vst/vst_data" \
       "${data_root}/data_log/vst/vst_video" \
       "${data_root}/data_log/vst/temp_files" \
