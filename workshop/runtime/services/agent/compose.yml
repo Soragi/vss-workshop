@@ -42,7 +42,9 @@ services:
       REPORT_REFERENCE_BASE_DIR: ${REPORT_REFERENCE_BASE_DIR}
     volumes:
       - ${VSS_APPS_DIR}:/vss-agent/deploy/docker:ro
-    entrypoint: ["/vss-agent/.venv/bin/python3", "/vss-agent/deploy/docker/services/agent/cosmos3_compat_entrypoint.py"]
+      # Exact VSS Agent 3.2.1 source with the workshop's Cosmos request and
+      # private analysis-proxy routing compatibility edits.
+      - ${VSS_APPS_DIR}/services/agent/video_understanding_3_2_1.py:/vss-agent/.venv/lib/python3.13/site-packages/vss_agents/tools/video_understanding.py:ro
     command: ["serve", "--config_file", "${VSS_AGENT_CONFIG_FILE}", "--host", "${VSS_AGENT_HOST}", "--port", "${VSS_AGENT_PORT}"]
     healthcheck:
       test: ["CMD", "/usr/local/bin/python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://${VSS_AGENT_HOST}:${VSS_AGENT_PORT}/health',timeout=5).status == 200 else 1)"]
