@@ -30,7 +30,9 @@ services:
       VST_INGRESS_ENDPOINT: ${VST_INGRESS_ENDPOINT}
       ENABLE_AGING_POLICY: "true"
       VST_VIDEO_STORAGE_SIZE_MB: ${VST_VIDEO_STORAGE_SIZE_MB}
-      ANALYSIS_PROXY_BIND: 127.0.0.1
+      # Cosmos runs on the Compose bridge, so it reaches this host-networked
+      # service through HOST_IP. Port 30900 is not published by Brev.
+      ANALYSIS_PROXY_BIND: 0.0.0.0
       ANALYSIS_PROXY_PORT: 30900
       ANALYSIS_INPUT_DIR: /home/vst/vst_release/webroot/temp_files
       ANALYSIS_CACHE_DIR: /home/vst/vst_release/webroot/temp_files/.analysis_cache

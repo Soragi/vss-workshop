@@ -36,9 +36,9 @@ PATCHED = """            mm_processor_kwargs = {
 ORIGINAL_VIDEO_URL = """            video_url = rewrite_to_internal_vst_url(video_url, config.vst_internal_url)
 """
 
-PATCHED_VIDEO_URL = """            analysis_base_url = (
-                "http://127.0.0.1:30900"
-            )
+PATCHED_VIDEO_URL = """            analysis_base_url = config.vst_internal_url
+            if analysis_base_url:
+                analysis_base_url = f"{analysis_base_url.rsplit(':', 1)[0]}:30900"
             video_url = rewrite_to_internal_vst_url(video_url, analysis_base_url)
 """
 
