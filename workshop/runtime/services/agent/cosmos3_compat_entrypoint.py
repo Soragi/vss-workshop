@@ -13,8 +13,10 @@ silently.
 
 from __future__ import annotations
 
-import os
+import importlib.abc
+import importlib.util
 from pathlib import Path
+import runpy
 import sys
 
 
@@ -32,7 +34,38 @@ PATCHED = """            mm_processor_kwargs = {
 """
 
 
-def patch_cosmos3_request_shape() -> None:
+TARGET_MODULE = "vss_agents.tools.video_understanding"
+
+
+class PatchedModuleLoader(importlib.abc.Loader):
+    def __init__(self, module_path: Path, source: str) -> None:
+        self.module_path = module_path
+        self.source = source
+
+    def create_module(self, spec):  # noqa: ANN001, ANN201
+        return None
+
+    def exec_module(self, module) -> None:  # noqa: ANN001
+        code = compile(self.source, str(self.module_path), "exec")
+        exec(code, module.__dict__)
+
+
+class PatchedModuleFinder(importlib.abc.MetaPathFinder):
+    def __init__(self, module_path: Path, source: str) -> None:
+        self.module_path = module_path
+        self.loader = PatchedModuleLoader(module_path, source)
+
+    def find_spec(self, fullname, path, target=None):  # noqa: ANN001, ANN201, ARG002
+        if fullname != TARGET_MODULE:
+            return None
+        return importlib.util.spec_from_file_location(
+            fullname,
+            self.module_path,
+            loader=self.loader,
+        )
+
+
+def install_cosmos3_request_shape_fix() -> None:
     candidates = list(
         Path("/vss-agent/.venv/lib").glob(
             "python*/site-packages/vss_agents/tools/video_understanding.py"
@@ -47,23 +80,25 @@ def patch_cosmos3_request_shape() -> None:
     module_path = candidates[0]
     source = module_path.read_text(encoding="utf-8")
     if PATCHED in source:
-        return
-    if source.count(ORIGINAL) != 1:
+        patched_source = source
+    elif source.count(ORIGINAL) == 1:
+        patched_source = source.replace(ORIGINAL, PATCHED, 1)
+    else:
         raise RuntimeError(
             "The installed VSS Agent no longer matches the validated 3.2.1 "
             "Cosmos compatibility patch."
         )
 
-    module_path.write_text(source.replace(ORIGINAL, PATCHED, 1), encoding="utf-8")
+    # The NVIDIA image runs as UID 1000 and its site-packages are read-only.
+    # Patch only the in-memory source used for this exact module import.
+    sys.meta_path.insert(0, PatchedModuleFinder(module_path, patched_source))
     print("Applied VSS 3.2.1 Cosmos 3 preprocessing compatibility fix.", flush=True)
 
 
 def main() -> None:
-    patch_cosmos3_request_shape()
-    os.execv(
-        sys.executable,
-        [sys.executable, "/vss-agent/entrypoint.py", *sys.argv[1:]],
-    )
+    install_cosmos3_request_shape_fix()
+    sys.argv = ["/vss-agent/entrypoint.py", *sys.argv[1:]]
+    runpy.run_path("/vss-agent/entrypoint.py", run_name="__main__")
 
 
 if __name__ == "__main__":
