@@ -2,6 +2,32 @@
 # SPDX-License-Identifier: Apache-2.0
 
 services:
+  video-analysis-proxy:
+    image: nvcr.io/nvidia/vss-core/vss-vios-streamprocessing:${VST_STREAM_PROCESSOR_IMAGE_TAG}
+    container_name: vss-video-analysis-proxy
+    network_mode: host
+    profiles: ["bp_developer_base_2d"]
+    user: "0:0"
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: ${VLM_DEVICE_ID}
+      ANALYSIS_PROXY_BIND: 127.0.0.1
+      ANALYSIS_PROXY_PORT: 30900
+      ANALYSIS_INPUT_DIR: /input
+      ANALYSIS_CACHE_DIR: /output
+    volumes:
+      - ${VSS_APPS_DIR}/services/agent/video_analysis_proxy.py:/opt/vss-workshop/video_analysis_proxy.py:ro
+      - ${VSS_DATA_DIR}/data_log/vst/temp_files:/input:ro
+      - ${VSS_DATA_DIR}/data_log/analysis-cache:/output
+    entrypoint: ["/usr/bin/python3", "/opt/vss-workshop/video_analysis_proxy.py"]
+    healthcheck:
+      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:30900/health',timeout=5).status == 200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+      start_period: 15s
+    restart: unless-stopped
+
   vss-agent:
     image: nvcr.io/nvidia/vss-core/vss-agent:${VSS_AGENT_VERSION}
     container_name: vss-agent
@@ -52,6 +78,8 @@ services:
       start_period: 240s
     restart: unless-stopped
     depends_on:
+      video-analysis-proxy:
+        condition: service_healthy
       nvidia-nemotron-nano-9b-v2:
         condition: service_healthy
       cosmos3-reasoner:

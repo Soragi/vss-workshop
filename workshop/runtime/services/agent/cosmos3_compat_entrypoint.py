@@ -33,6 +33,15 @@ PATCHED = """            mm_processor_kwargs = {
             }
 """
 
+ORIGINAL_VIDEO_URL = """            video_url = rewrite_to_internal_vst_url(video_url, config.vst_internal_url)
+"""
+
+PATCHED_VIDEO_URL = """            analysis_base_url = (
+                "http://127.0.0.1:30900" if is_cosmos_model else config.vst_internal_url
+            )
+            video_url = rewrite_to_internal_vst_url(video_url, analysis_base_url)
+"""
+
 
 TARGET_MODULE = "vss_agents.tools.video_understanding"
 
@@ -79,20 +88,29 @@ def install_cosmos3_request_shape_fix() -> None:
 
     module_path = candidates[0]
     source = module_path.read_text(encoding="utf-8")
-    if PATCHED in source:
-        patched_source = source
-    elif source.count(ORIGINAL) == 1:
-        patched_source = source.replace(ORIGINAL, PATCHED, 1)
-    else:
-        raise RuntimeError(
-            "The installed VSS Agent no longer matches the validated 3.2.1 "
-            "Cosmos compatibility patch."
-        )
+    patched_source = replace_exactly_once(source, ORIGINAL, PATCHED, "pixel-budget schema")
+    patched_source = replace_exactly_once(
+        patched_source,
+        ORIGINAL_VIDEO_URL,
+        PATCHED_VIDEO_URL,
+        "analysis proxy URL",
+    )
 
     # The NVIDIA image runs as UID 1000 and its site-packages are read-only.
     # Patch only the in-memory source used for this exact module import.
     sys.meta_path.insert(0, PatchedModuleFinder(module_path, patched_source))
     print("Applied VSS 3.2.1 Cosmos 3 preprocessing compatibility fix.", flush=True)
+
+
+def replace_exactly_once(source: str, original: str, replacement: str, label: str) -> str:
+    if replacement in source:
+        return source
+    if source.count(original) != 1:
+        raise RuntimeError(
+            "The installed VSS Agent no longer matches the validated 3.2.1 "
+            f"Cosmos compatibility patch ({label})."
+        )
+    return source.replace(original, replacement, 1)
 
 
 def main() -> None:
